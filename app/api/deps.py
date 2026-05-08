@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
+from app.services import user_service
 
 # Registers `HTTP Bearer` in OpenAPI so Swagger UI shows Authorize + lock on protected routes.
 http_bearer = HTTPBearer(auto_error=False)
@@ -50,7 +50,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = await db.scalar(select(User).where(User.id == user_id))
+    user = await user_service.get_user_by_id(db, user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
