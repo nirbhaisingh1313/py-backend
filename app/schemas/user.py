@@ -16,3 +16,12 @@ class UserResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class UserSuccessResponse(BaseModel):
+    """Standard envelope for authenticated user profile responses."""
+
+    success: bool = True
+    user: UserResponse
+
+    model_config = ConfigDict(from_attributes=True)
+
