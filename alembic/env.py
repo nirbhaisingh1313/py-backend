@@ -10,6 +10,7 @@ from alembic import context
 # Import metadata for autogenerate
 from app.db.base import Base
 from app.models import user as _user  # noqa: F401
+from app.models import task as _task  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
