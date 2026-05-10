@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import EmailAlreadyRegisteredError, InvalidCredentialsError
+from app.core.redis_client import get_redis
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import AuthSuccessResponse
 from app.schemas.user import UserCreate, UserLogin, UserResponse
-from app.services import auth_service
+from app.services import auth_service, user_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -22,11 +24,17 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
 
 
 @router.post("/login", response_model=AuthSuccessResponse)
-async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)) -> AuthSuccessResponse:
+async def login(
+    payload: UserLogin,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+) -> AuthSuccessResponse:
     try:
-        return await auth_service.login_user(db, payload)
+        response, user = await auth_service.login_user(db, payload)
     except InvalidCredentialsError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
+    await user_service.set_user_cache(redis, user)
+    return response

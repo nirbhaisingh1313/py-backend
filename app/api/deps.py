@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.redis_client import get_redis
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
@@ -16,6 +18,7 @@ http_bearer = HTTPBearer(auto_error=False)
 async def get_current_user(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
     credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer),
 ) -> User:
     if credentials is None:
@@ -50,7 +53,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = await user_service.get_user_by_id(db, user_id)
+    user = await user_service.get_user_by_id(db, redis, user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

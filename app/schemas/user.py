@@ -25,3 +25,14 @@ class UserSuccessResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class CachedUserSnapshot(BaseModel):
+    """Redis-safe user payload (no password hash). Rebuild as transient User for request scope."""
+
+    id: int
+    email: EmailStr
+    name: str | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+

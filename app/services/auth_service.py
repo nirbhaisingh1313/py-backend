@@ -31,15 +31,18 @@ async def register_user(db: AsyncSession, payload: UserCreate) -> User:
     return user
 
 
-async def login_user(db: AsyncSession, payload: UserLogin) -> AuthSuccessResponse:
+async def login_user(db: AsyncSession, payload: UserLogin) -> tuple[AuthSuccessResponse, User]:
     user = await user_repository.get_by_email(db, str(payload.email))
     if user is None or not verify_password(payload.password, user.hashed_password):
         raise InvalidCredentialsError
 
     access_token = create_access_token(user_id=user.id, email=str(user.email))
-    return AuthSuccessResponse(
-        success=True,
-        user=UserResponse.model_validate(user),
-        access_token=access_token,
-        token_type="bearer",
+    return (
+        AuthSuccessResponse(
+            success=True,
+            user=UserResponse.model_validate(user),
+            access_token=access_token,
+            token_type="bearer",
+        ),
+        user,
     )
