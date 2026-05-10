@@ -1,8 +1,10 @@
 from __future__ import annotations
 from typing import Literal
 from fastapi import APIRouter, Depends, Query, status
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
+from app.core.redis_client import get_redis
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.task import (
@@ -24,8 +26,9 @@ async def create_task(
     payload: TaskCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> TaskSuccessResponse:
-    task = await task_service.create_task_service(db, payload, current_user.id)
+    task = await task_service.create_task_service(db, redis, payload, current_user.id)
     return TaskSuccessResponse(success=True, task=task)
 
 
@@ -49,9 +52,10 @@ async def get_all_tasks(
     offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> TasksListSuccessResponse:
     tasks = await task_service.get_all_tasks_service(
-        db, current_user.id, status, priority, sort_by, sort_order, limit, offset
+        db, redis, current_user.id, status, priority, sort_by, sort_order, limit, offset
     )
     return TasksListSuccessResponse(success=True, tasks=tasks)
 
@@ -62,8 +66,9 @@ async def update_task(
     payload: TaskUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> TaskSuccessResponse:
-    task = await task_service.update_task_service(db, task_id, payload, current_user.id)
+    task = await task_service.update_task_service(db, redis, task_id, payload, current_user.id)
     return TaskSuccessResponse(success=True, task=task)
 
 
@@ -72,6 +77,7 @@ async def delete_task(
     task_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> TaskDeleteSuccessResponse:
-    await task_service.delete_task_service(db, task_id, current_user.id)
+    await task_service.delete_task_service(db, redis, task_id, current_user.id)
     return TaskDeleteSuccessResponse(success=True, message="Task deleted successfully")

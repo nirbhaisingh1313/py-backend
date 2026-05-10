@@ -3,9 +3,18 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 
 import redis.asyncio as redis
+import redis.exceptions as redis_exc
 from redis.asyncio import Redis
 
 from app.core.config import settings
+
+# Async client retry/connect often raises builtins (e.g. ConnectionRefusedError), not only RedisError.
+REDIS_UNAVAILABLE: tuple[type[BaseException], ...] = (
+    redis_exc.RedisError,
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
 
 _pool: redis.ConnectionPool | None = None
 
@@ -18,6 +27,8 @@ def _connection_pool() -> redis.ConnectionPool:
             port=settings.REDIS_PORT,
             db=settings.REDIS_DB,
             decode_responses=True,
+            socket_connect_timeout=settings.REDIS_SOCKET_CONNECT_TIMEOUT,
+            socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
         )
     return _pool
 
