@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,8 +14,10 @@ from app.models.user import User
 from app.schemas.auth import AuthSuccessResponse
 from app.schemas.user import UserCreate, UserLogin, UserResponse
 from app.services import auth_service, user_service
+from app.tasks.email_tasks import send_welcome_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -30,11 +34,18 @@ async def register(
         redis, f"auth_rate_limit:register:{client_ip}", limit=50, seconds=60
     )
     try:
-        return await auth_service.register_user(db, payload)
+        user = await auth_service.register_user(db, payload)
     except EmailAlreadyRegisteredError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
         )
+
+    try:
+        send_welcome_email.delay(user_id=user.id, email=str(user.email))
+    except Exception:
+        logger.exception("Failed to enqueue welcome email for user_id=%s", user.id)
+
+    return user
 
 
 @router.post("/login", response_model=AuthSuccessResponse)
