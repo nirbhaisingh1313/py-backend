@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any, Literal
 
 from fastapi import HTTPException
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.connection_manager import user_events_channel
 from app.core.redis_client import REDIS_UNAVAILABLE
 from app.repositories import task_repository
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
+from app.schemas.websocket import WebSocketEvent
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +94,30 @@ async def invalidate_user_tasks_list_cache(redis: Redis, user_id: int) -> None:
         logger.warning("Redis invalidate_user_tasks_list_cache failed: %s", exc)
 
 
+async def publish_task_update(
+    redis: Redis,
+    user_id: int,
+    action: Literal["created", "updated", "deleted"],
+    *,
+    task: TaskResponse | None = None,
+    task_id: int | None = None,
+) -> None:
+    data: dict[str, Any] = {"action": action}
+    if task is not None:
+        data["task"] = task.model_dump(mode="json")
+    if task_id is not None:
+        data["task_id"] = task_id
+
+    event = WebSocketEvent(event="tasks", data=data)
+    try:
+        await redis.publish(
+            user_events_channel(user_id),
+            event.model_dump_json(exclude_none=True),
+        )
+    except REDIS_UNAVAILABLE as exc:
+        logger.warning("Redis publish_task_update failed: %s", exc)
+
+
 async def create_task_service(
     db: AsyncSession, redis: Redis, task: TaskCreate, owner_id: int
 ) -> TaskResponse:
@@ -104,7 +131,9 @@ async def create_task_service(
 
     row = await task_repository.create_task(db, task, owner_id)
     await invalidate_user_tasks_list_cache(redis, owner_id)
-    return TaskResponse.model_validate(row)
+    response = TaskResponse.model_validate(row)
+    await publish_task_update(redis, owner_id, "created", task=response)
+    return response
 
 
 async def get_task_by_id_service(
@@ -158,7 +187,9 @@ async def update_task_service(
 
     row = await task_repository.update_task(db, task_id, task)
     await invalidate_user_tasks_list_cache(redis, owner_id)
-    return TaskResponse.model_validate(row)
+    response = TaskResponse.model_validate(row)
+    await publish_task_update(redis, owner_id, "updated", task=response)
+    return response
 
 
 async def delete_task_service(db: AsyncSession, redis: Redis, task_id: int, owner_id: int) -> None:
@@ -169,3 +200,4 @@ async def delete_task_service(db: AsyncSession, redis: Redis, task_id: int, owne
         )
     await task_repository.delete_task(db, task_id)
     await invalidate_user_tasks_list_cache(redis, owner_id)
+    await publish_task_update(redis, owner_id, "deleted", task_id=task_id)
