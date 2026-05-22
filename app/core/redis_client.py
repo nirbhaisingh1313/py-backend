@@ -42,6 +42,16 @@ async def get_redis() -> AsyncGenerator[Redis, None]:
         await client.aclose()
 
 
+async def ping_redis() -> None:
+    """Raise REDIS_UNAVAILABLE if the shared pool cannot reach Redis."""
+    client = redis.Redis(connection_pool=_connection_pool())
+    try:
+        if await client.ping() is not True:
+            raise redis_exc.RedisError("unexpected PING response")
+    finally:
+        await client.aclose()
+
+
 async def close_redis_pool() -> None:
     global _pool
     if _pool is not None:

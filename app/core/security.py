@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -11,10 +10,10 @@ from jose import jwt, JWTError
 from redis.asyncio import Redis
 
 from app.core.config import settings
+from app.core.error_logging import log_redis_failure
 from app.core.redis_client import REDIS_UNAVAILABLE
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-_logger = logging.getLogger(__name__)
 
 
 def get_client_ip(request: Request) -> str:
@@ -86,6 +85,6 @@ async def check_rate_limit(
             )
     except REDIS_UNAVAILABLE as exc:
         # Fail open so the API stays usable when Redis is down (no long hangs).
-        _logger.warning("Rate limit skipped (Redis unavailable): %s", exc)
+        log_redis_failure("rate_limit", exc, rate_limit_key=key)
 
     return True

@@ -3,13 +3,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
+
+from app.core.error_logging import log_error
 from collections.abc import Mapping
 from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
-
-logger = logging.getLogger(__name__)
-
 
 def user_events_channel(user_id: int) -> str:
     return f"websocket:user:{user_id}:events"
@@ -60,8 +59,13 @@ class ConnectionManager:
         except (RuntimeError, WebSocketDisconnect):
             await self.disconnect(user_id, websocket)
             return False
-        except Exception:
-            logger.exception("Failed to send websocket message to user_id=%s", user_id)
+        except Exception as exc:
+            log_error(
+                "Failed to send websocket message",
+                event="websocket_send_failure",
+                exc=exc,
+                user_id=user_id,
+            )
             await self.disconnect(user_id, websocket)
             return False
 

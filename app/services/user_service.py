@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-import logging
-
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.error_logging import log_redis_failure
 from app.core.redis_client import REDIS_UNAVAILABLE
 from app.models.user import User
 from app.repositories import user_repository
 from app.schemas.user import CachedUserSnapshot
-
-logger = logging.getLogger(__name__)
-
 
 def _user_cache_key(user_id: int) -> str:
     return f"user:auth:{user_id}"
@@ -42,14 +38,14 @@ async def set_user_cache(redis: Redis, user: User) -> None:
             ex=_cache_ttl_seconds(),
         )
     except REDIS_UNAVAILABLE as exc:
-        logger.warning("Redis set_user_cache failed: %s", exc)
+        log_redis_failure("set_user_cache", exc, user_id=user.id)
 
 
 async def invalidate_user_cache(redis: Redis, user_id: int) -> None:
     try:
         await redis.delete(_user_cache_key(user_id))
     except REDIS_UNAVAILABLE as exc:
-        logger.warning("Redis invalidate_user_cache failed: %s", exc)
+        log_redis_failure("invalidate_user_cache", exc, user_id=user_id)
 
 
 async def get_user_by_id(db: AsyncSession, redis: Redis, user_id: int) -> User | None:
@@ -57,7 +53,7 @@ async def get_user_by_id(db: AsyncSession, redis: Redis, user_id: int) -> User |
     try:
         cached = await redis.get(key)
     except REDIS_UNAVAILABLE as exc:
-        logger.warning("Redis get_user_cache failed, falling back to DB: %s", exc)
+        log_redis_failure("get_user_cache", exc, user_id=user_id)
         cached = None
 
     if cached:

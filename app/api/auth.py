@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import logging
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
+from app.core.error_logging import log_error
 from app.core.errors import EmailAlreadyRegisteredError, InvalidCredentialsError
 from app.core.redis_client import get_redis
 from app.db.session import get_db
@@ -17,7 +16,6 @@ from app.services import auth_service, user_service
 from app.tasks.email_tasks import send_welcome_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -42,8 +40,13 @@ async def register(
 
     try:
         send_welcome_email.delay(user_id=user.id, email=str(user.email))
-    except Exception:
-        logger.exception("Failed to enqueue welcome email for user_id=%s", user.id)
+    except Exception as exc:
+        log_error(
+            "Failed to enqueue welcome email",
+            event="celery_enqueue_failure",
+            exc=exc,
+            user_id=user.id,
+        )
 
     return user
 
