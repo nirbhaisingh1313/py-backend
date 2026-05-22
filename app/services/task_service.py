@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any, Literal
 
 from fastapi import HTTPException
@@ -9,13 +8,11 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.connection_manager import user_events_channel
+from app.core.error_logging import log_redis_failure
 from app.core.redis_client import REDIS_UNAVAILABLE
 from app.repositories import task_repository
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
 from app.schemas.websocket import WebSocketEvent
-
-logger = logging.getLogger(__name__)
-
 
 def _task_list_cache_key(
     user_id: int,
@@ -60,7 +57,7 @@ async def set_tasks_list_cache(
     try:
         await redis.set(key, _serialize_task_list(tasks), ex=_task_list_cache_ttl_seconds())
     except REDIS_UNAVAILABLE as exc:
-        logger.warning("Redis set_tasks_list_cache failed: %s", exc)
+        log_redis_failure("set_tasks_list_cache", exc, user_id=user_id)
 
 
 async def get_tasks_list_cache(
@@ -80,7 +77,7 @@ async def get_tasks_list_cache(
             return None
         return _deserialize_task_list(raw)
     except REDIS_UNAVAILABLE as exc:
-        logger.warning("Redis get_tasks_list_cache failed: %s", exc)
+        log_redis_failure("get_tasks_list_cache", exc, user_id=user_id)
         return None
 
 
@@ -91,7 +88,7 @@ async def invalidate_user_tasks_list_cache(redis: Redis, user_id: int) -> None:
         if keys:
             await redis.delete(*keys)
     except REDIS_UNAVAILABLE as exc:
-        logger.warning("Redis invalidate_user_tasks_list_cache failed: %s", exc)
+        log_redis_failure("invalidate_user_tasks_list_cache", exc, user_id=user_id)
 
 
 async def publish_task_update(
@@ -115,7 +112,7 @@ async def publish_task_update(
             event.model_dump_json(exclude_none=True),
         )
     except REDIS_UNAVAILABLE as exc:
-        logger.warning("Redis publish_task_update failed: %s", exc)
+        log_redis_failure("publish_task_update", exc, user_id=user_id, action=action)
 
 
 async def create_task_service(
